@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # 1. TrueForge Frontend (React + Vite + Tailwind CSS + Lucide)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - trueforge-network
+
+  # 2. TrueForge Agent Backend (FastAPI + Pydantic + SQLAlchemy + Safety Agent)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://trueforge_admin:tf_secure_pass_2026@postgres-prod:5432/trueforge_prod
+      - SANDBOX_DATABASE_URL=postgresql://trueforge_admin:tf_secure_pass_2026@postgres-sandbox:5432/trueforge_sandbox
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ENVIRONMENT=production
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      postgres-sandbox:
+        condition: service_healthy
+    networks:
+      - trueforge-network
+
+  # 3. Production PostgreSQL Database (Protected - No direct auto-modification)
+  postgres-prod:
+    image: postgres:16-alpine
+    container_name: tf_postgres_prod
+    environment:
+      POSTGRES_USER: trueforge_admin
+      POSTGRES_PASSWORD: tf_secure_pass_2026
+      POSTGRES_DB: trueforge_prod
+    ports:
+      - "5432:5432"
+    volumes:
+      - prod_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trueforge_admin -d trueforge_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trueforge-network
+
+  # 4. Isolated Sandbox PostgreSQL Database (Agent Execution Environment)
+  postgres-sandbox:
+    image: postgres:16-alpine
+    container_name: tf_postgres_sandbox
+    environment:
+      POSTGRES_USER: trueforge_admin
+      POSTGRES_PASSWORD: tf_secure_pass_2026
+      POSTGRES_DB: trueforge_sandbox
+    ports:
+      - "5433:5432"
+    volumes:
+      - sandbox_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trueforge_admin -d trueforge_sandbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trueforge-network
+
+volumes:
+  prod_data:
+  sandbox_data:
+
+networks:
+  trueforge-network:
+    driver: bridge

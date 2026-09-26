@@ -1,0 +1,6 @@
+{
+  "name": "TrueForge — Database Change Safety Agent",
+  "description": "Autonomous database migration safety agent validating schema changes in isolated sandboxes before production with automated integrity checks and human approval gates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

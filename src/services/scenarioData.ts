@@ -1,0 +1,58 @@
+import { MigrationScenario } from '../types/database';
+
+export const DEMO_SCENARIOS: MigrationScenario[] = [
+  {
+    id: 'scenario_1_safe_add_column',
+    title: 'Migration 1 — Safe Column Addition',
+    category: 'SAFE',
+    sql: `ALTER TABLE users\nADD COLUMN last_login_at TIMESTAMP NULL;`,
+    rollbackSql: `ALTER TABLE users\nDROP COLUMN last_login_at;`,
+    description: 'Adds a nullable timestamp column to the users table without table lock or backfill requirements.',
+    expectedOutcome: 'PASS',
+  },
+  {
+    id: 'scenario_2_truncation_risk',
+    title: 'Migration 2 — Data Truncation Risk (Narrowing Column)',
+    category: 'DANGEROUS',
+    sql: `ALTER TABLE users\nALTER COLUMN email TYPE VARCHAR(30);`,
+    rollbackSql: `ALTER TABLE users\nALTER COLUMN email TYPE VARCHAR(255);`,
+    description: 'Narrows the email column from VARCHAR(255) to VARCHAR(30). Existing enterprise emails will be silently truncated or rejected.',
+    expectedOutcome: 'FAIL',
+  },
+  {
+    id: 'scenario_3_destructive_drop',
+    title: 'Migration 3 — Destructive Change (Drop Column)',
+    category: 'DESTRUCTIVE',
+    sql: `ALTER TABLE users\nDROP COLUMN name;`,
+    rollbackSql: `-- ⚠️ IRREVERSIBLE: Restoring column structure without original values:\nALTER TABLE users\nADD COLUMN name VARCHAR(255) NULL;`,
+    description: 'Drops the "name" column permanently. 120 user records will lose their human-readable full names.',
+    expectedOutcome: 'FAIL',
+  },
+  {
+    id: 'scenario_4_foreign_key',
+    title: 'Migration 4 — Foreign Key Constraint Check',
+    category: 'CONSTRAINT',
+    sql: `ALTER TABLE orders\nADD CONSTRAINT orders_user_fk\nFOREIGN KEY (user_id)\nREFERENCES users(id);`,
+    rollbackSql: `ALTER TABLE orders\nDROP CONSTRAINT orders_user_fk;`,
+    description: 'Adds a strict foreign key constraint from orders to users. The agent validates that all 520 orders reference active users.',
+    expectedOutcome: 'PASS',
+  },
+  {
+    id: 'scenario_5_index_creation',
+    title: 'Migration 5 — Performance Index Addition',
+    category: 'INDEX',
+    sql: `CREATE INDEX idx_users_email_lookup\nON users(email);`,
+    rollbackSql: `DROP INDEX idx_users_email_lookup;`,
+    description: 'Creates a B-Tree search index on users.email to speed up authentication lookups without modifying table rows.',
+    expectedOutcome: 'PASS',
+  },
+  {
+    id: 'scenario_6_row_loss',
+    title: 'Migration 6 — Unexpected Data Loss (Row Deletion)',
+    category: 'ROW_LOSS',
+    sql: `DELETE FROM orders WHERE status = 'cancelled';`,
+    rollbackSql: `-- Data recovery requires point-in-time snapshot restore.`,
+    description: 'Accidental or hidden deletion of records during migration script. The agent detects row count discrepancy.',
+    expectedOutcome: 'FAIL',
+  },
+];
